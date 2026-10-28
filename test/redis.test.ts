@@ -120,6 +120,38 @@ describe('Redis Emulator', () => {
     expect(range).toContain('player2');
   });
 
+  test('Dynamic Configuration (CONFIG GET, CONFIG SET, AUTH)', async () => {
+    // 1. CONFIG GET
+    let res = await registry.execute(['CONFIG', 'GET', 'port'], getCtx());
+    expect(res).toContain('port');
+
+    // 2. CONFIG SET requirepass dynamically
+    res = await registry.execute(['CONFIG', 'SET', 'requirepass', 'secret123'], getCtx());
+    expect(res).toBe('+OK\r\n');
+    expect(config.getProperty('requirepass')).toBe('secret123');
+
+    // New unauthenticated client should be rejected
+    const unauthClient = new ClientSession(2, mockSocket, true);
+    const unauthCtx = { ...getCtx(), client: unauthClient };
+    let failRes = await registry.execute(['GET', 'num'], unauthCtx);
+    expect(failRes).toBe('-NOAUTH Authentication required.\r\n');
+
+    // Authenticate
+    let authRes = await registry.execute(['AUTH', 'secret123'], unauthCtx);
+    expect(authRes).toBe('+OK\r\n');
+
+    let successRes = await registry.execute(['GET', 'num'], unauthCtx);
+    expect(successRes).toBe('$5\r\n11xyz\r\n');
+
+    // Remove password dynamically
+    await registry.execute(['CONFIG', 'SET', 'requirepass', ''], getCtx());
+    expect(config.getProperty('requirepass')).toBeNull();
+
+    // 3. CONFIG REWRITE
+    const rewriteRes = await registry.execute(['CONFIG', 'REWRITE'], getCtx());
+    expect(rewriteRes).toBe('+OK\r\n');
+  });
+
   test('JSON Persistence: SAVE and load', async () => {
     await persistence.save();
     const filePath = config.getPathToDataFile();

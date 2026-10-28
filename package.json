@@ -1,11 +1,18 @@
 {
-  "name": "test",
-  "module": "index.ts",
+  "name": "redis-bun-emulator",
+  "version": "1.0.0",
+  "description": "High-performance Redis emulator in TypeScript running on Bun with JSON persistence",
+  "module": "src/main.ts",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "bun run src/main.ts",
     "start:dev": "bun --watch run src/main.ts",
+    "build": "bun build src/main.ts --target bun --outdir dist",
+    "build:bin": "bun build --compile --outfile dist/redis-server src/main.ts",
+    "build:all": "bun run build && bun run build:bin",
+    "start:dist": "bun run dist/main.js",
+    "test": "bun test",
     "typecheck": "bun check"
   },
   "devDependencies": {

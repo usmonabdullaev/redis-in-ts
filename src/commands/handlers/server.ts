@@ -100,7 +100,7 @@ export const serverCommands: CommandDefinition[] = [
   {
     name: 'CONFIG',
     minArgs: 1,
-    handler: (args, ctx) => {
+    handler: async (args, ctx) => {
       const sub = args[0]!.toUpperCase();
 
       if (sub === 'GET') {
@@ -124,9 +124,27 @@ export const serverCommands: CommandDefinition[] = [
         const val = args[2]!;
         const ok = ctx.config.setProperty(param, val);
         if (ok) {
+          // If save interval was changed, restart timer in persistence
+          if (param.toLowerCase() === 'save' || param.toLowerCase() === 'save-interval' || param.toLowerCase() === 'saveintervalms') {
+            const interval = ctx.config.getProperty('saveIntervalMs');
+            if (interval > 0) {
+              ctx.persistence.startAutoSave(interval);
+            } else {
+              ctx.persistence.stopAutoSave();
+            }
+          }
           return RespSerializer.ok();
         }
         return RespSerializer.error(`ERR Unsupported CONFIG parameter: ${param}`);
+      }
+
+      if (sub === 'REWRITE') {
+        try {
+          await ctx.config.rewriteConfig();
+          return RespSerializer.ok();
+        } catch (err: any) {
+          return RespSerializer.error(`ERR Failed to rewrite config: ${err.message}`);
+        }
       }
 
       if (sub === 'RESETSTAT') {

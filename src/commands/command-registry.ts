@@ -50,7 +50,8 @@ export class CommandRegistry {
 
     // Check Authentication
     const requiresAuth = cmd.requiresAuth !== false;
-    if (requiresAuth && !ctx.client.authenticated) {
+    const serverPassword = ctx.config.getProperty('requirepass');
+    if (requiresAuth && serverPassword && !ctx.client.authenticated) {
       return RespSerializer.error('NOAUTH Authentication required.');
     }
 

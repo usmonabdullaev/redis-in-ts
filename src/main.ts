@@ -24,6 +24,17 @@ async function bootstrap() {
 
   logger.setLevel(config.logLevel);
 
+  configManager.onChange((key, val) => {
+    if (key === 'loglevel') {
+      logger.setLevel(val as any);
+      logger.info(`Log level dynamically changed to: ${val}`);
+    } else if (key === 'requirepass') {
+      logger.info(val ? 'Authentication password updated dynamically.' : 'Authentication password removed (no auth required).');
+    } else {
+      logger.info(`Config parameter '${key}' dynamically changed to: ${val}`);
+    }
+  });
+
   const banner = BANNER
     .replace(':PORT:', config.port.toString())
     .replace(':PID:', process.pid.toString())
