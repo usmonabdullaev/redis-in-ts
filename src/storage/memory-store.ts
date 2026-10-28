@@ -1,5 +1,6 @@
 import { matchGlob } from '../utils/glob.ts';
 import { SortedSet, type ZNode } from './zset.ts';
+import { Stream, type StreamEntry } from './stream.ts';
 import type {
   StorageEntry,
   StringEntry,
@@ -7,6 +8,7 @@ import type {
   ListEntry,
   SetEntry,
   ZSetEntry,
+  StreamDbEntry,
   SerializedEntry,
 } from './types.ts';
 
@@ -778,6 +780,77 @@ export class MemoryStore {
     return entry.value.getRevRank(member);
   }
 
+  // --- Stream Operations ---
+
+  public xadd(key: string, id: string, fields: [string, string][], maxLen?: number): string {
+    let entry = this.getRawEntry(key);
+    if (!entry) {
+      entry = {
+        type: 'stream',
+        value: new Stream(),
+        expiresAt: null,
+      };
+      this.entries.set(key, entry);
+    } else if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.add(id, fields, maxLen);
+  }
+
+  public xlen(key: string): number {
+    const entry = this.getRawEntry(key);
+    if (!entry) return 0;
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.length;
+  }
+
+  public xrange(key: string, start: string, end: string, count?: number): StreamEntry[] {
+    const entry = this.getRawEntry(key);
+    if (!entry) return [];
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.range(start, end, count);
+  }
+
+  public xrevrange(key: string, end: string, start: string, count?: number): StreamEntry[] {
+    const entry = this.getRawEntry(key);
+    if (!entry) return [];
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.revRange(end, start, count);
+  }
+
+  public xread(key: string, lastId: string, count?: number): StreamEntry[] {
+    const entry = this.getRawEntry(key);
+    if (!entry) return [];
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.readAfter(lastId, count);
+  }
+
+  public xdel(key: string, ids: string[]): number {
+    const entry = this.getRawEntry(key);
+    if (!entry) return 0;
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.delete(ids);
+  }
+
+  public xtrim(key: string, maxLen: number): number {
+    const entry = this.getRawEntry(key);
+    if (!entry) return 0;
+    if (entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    return entry.value.trim(maxLen);
+  }
+
   // --- Serialization / Deserialization for JSON Persistence ---
 
   public exportData(): Record<string, SerializedEntry> {
@@ -804,6 +877,9 @@ export class MemoryStore {
           val = Array.from(entry.value);
           break;
         case 'zset':
+          val = entry.value.toJSON();
+          break;
+        case 'stream':
           val = entry.value.toJSON();
           break;
       }
@@ -886,6 +962,15 @@ export class MemoryStore {
             this.entries.set(key, {
               type: 'zset',
               value: new SortedSet(znodes),
+              expiresAt: sEntry.expiresAt,
+            });
+            break;
+          }
+          case 'stream': {
+            const stream = Stream.fromJSON(Array.isArray(sEntry.value) ? sEntry.value : []);
+            this.entries.set(key, {
+              type: 'stream',
+              value: stream,
               expiresAt: sEntry.expiresAt,
             });
             break;

@@ -2,6 +2,7 @@ import type { ConfigManager } from '../config/index.ts';
 import type { DataStore } from '../storage/data-store.ts';
 import type { PersistenceManager } from '../storage/persistence.ts';
 import type { PubSubManager } from '../pubsub/pubsub-manager.ts';
+import { LuaEngine } from '../scripting/lua-engine.ts';
 import { CommandRegistry } from '../commands/command-registry.ts';
 import { ClientSession } from './client-session.ts';
 import { logger } from '../utils/logger.ts';
@@ -11,6 +12,7 @@ export class TcpServer {
   private dataStore: DataStore;
   private persistence: PersistenceManager;
   private pubsub: PubSubManager;
+  private luaEngine: LuaEngine = new LuaEngine();
   private commandRegistry: CommandRegistry;
 
   private server: any = null;
@@ -94,7 +96,9 @@ export class TcpServer {
               persistence: this.persistence,
               config: this.config,
               pubsub: this.pubsub,
+              luaEngine: this.luaEngine,
               connectedClientsCount: this.clients.size,
+              registry: this.commandRegistry,
             };
 
             const response = await this.commandRegistry.execute(commandArgs, ctx);

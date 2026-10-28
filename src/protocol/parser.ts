@@ -80,7 +80,7 @@ export class RespParser {
           return null; // Not enough data yet
         }
 
-        const val = this.buffer.toString('utf8', dataStart, dataEnd);
+        const val = this.buffer.toString('binary', dataStart, dataEnd);
         args.push(val);
         offset = dataEnd + 2; // Skip \r\n after bulk string
       } else if (prefix === 58 /* ':' */ || prefix === 43 /* '+' */) {

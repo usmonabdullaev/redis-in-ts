@@ -4,6 +4,8 @@ import type { MemoryStore } from '../storage/memory-store.ts';
 import type { PersistenceManager } from '../storage/persistence.ts';
 import type { PubSubManager } from '../pubsub/pubsub-manager.ts';
 import type { ClientSession } from '../server/client-session.ts';
+import type { LuaEngine } from '../scripting/lua-engine.ts';
+import type { CommandRegistry } from './command-registry.ts';
 
 export interface CommandContext {
   client: ClientSession;
@@ -12,7 +14,9 @@ export interface CommandContext {
   persistence: PersistenceManager;
   config: ConfigManager;
   pubsub: PubSubManager;
+  luaEngine: LuaEngine;
   connectedClientsCount: number;
+  registry?: CommandRegistry;
 }
 
 export type CommandHandler = (

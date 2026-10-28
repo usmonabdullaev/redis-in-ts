@@ -1,6 +1,7 @@
 import type { SortedSet } from './zset.ts';
+import type { Stream } from './stream.ts';
 
-export type RedisDataType = 'string' | 'hash' | 'list' | 'set' | 'zset';
+export type RedisDataType = 'string' | 'hash' | 'list' | 'set' | 'zset' | 'stream';
 
 export interface BaseEntry {
   type: RedisDataType;
@@ -32,7 +33,18 @@ export interface ZSetEntry extends BaseEntry {
   value: SortedSet;
 }
 
-export type StorageEntry = StringEntry | HashEntry | ListEntry | SetEntry | ZSetEntry;
+export interface StreamDbEntry extends BaseEntry {
+  type: 'stream';
+  value: Stream;
+}
+
+export type StorageEntry =
+  | StringEntry
+  | HashEntry
+  | ListEntry
+  | SetEntry
+  | ZSetEntry
+  | StreamDbEntry;
 
 /**
  * Serializable format for persistence in JSON file

@@ -3,6 +3,7 @@ import { ConfigManager } from '../src/config/index.ts';
 import { DataStore } from '../src/storage/data-store.ts';
 import { PersistenceManager } from '../src/storage/persistence.ts';
 import { PubSubManager } from '../src/pubsub/pubsub-manager.ts';
+import { LuaEngine } from '../src/scripting/lua-engine.ts';
 import { CommandRegistry } from '../src/commands/command-registry.ts';
 import { ClientSession } from '../src/server/client-session.ts';
 import { RespParser } from '../src/protocol/parser.ts';
@@ -12,6 +13,7 @@ describe('Redis Emulator', () => {
   const dataStore = new DataStore(16);
   const persistence = new PersistenceManager(config, dataStore);
   const pubsub = new PubSubManager();
+  const luaEngine = new LuaEngine();
   const registry = new CommandRegistry();
 
   const mockSocket = {
@@ -28,7 +30,9 @@ describe('Redis Emulator', () => {
     persistence,
     config,
     pubsub,
+    luaEngine,
     connectedClientsCount: 1,
+    registry,
   });
 
   test('RESP Parser works with bulk and inline commands', () => {
@@ -150,6 +154,53 @@ describe('Redis Emulator', () => {
     // 3. CONFIG REWRITE
     const rewriteRes = await registry.execute(['CONFIG', 'REWRITE'], getCtx());
     expect(rewriteRes).toBe('+OK\r\n');
+  });
+
+  test('Stream commands: XADD, XLEN, XRANGE', async () => {
+    const id1 = await registry.execute(['XADD', 'mystream', '*', 'event', 'job_added', 'id', '101'], getCtx());
+    expect(id1).toContain('$');
+
+    const len = await registry.execute(['XLEN', 'mystream'], getCtx());
+    expect(len).toBe(':1\r\n');
+
+    const range = await registry.execute(['XRANGE', 'mystream', '-', '+'], getCtx());
+    expect(range).toContain('job_added');
+    expect(range).toContain('101');
+  });
+
+  test('Lua Scripting (EVAL, redis.call, cjson, cmsgpack): BullMQ compatibility', async () => {
+    // 1. Basic EVAL with redis.call
+    const script1 = `
+      redis.call('SET', KEYS[1], ARGV[1])
+      return redis.call('GET', KEYS[1])
+    `;
+    const res1 = await registry.execute(['EVAL', script1, '1', 'lua_test_key', 'hello_from_lua'], getCtx());
+    expect(res1).toBe('$14\r\nhello_from_lua\r\n');
+
+    // 2. EVAL with cjson and cmsgpack like BullMQ
+    const scriptBull = `
+      local rcall = redis.call
+      local key = KEYS[1]
+      local jobData = cjson.decode(ARGV[1])
+      rcall('HSET', key, 'name', jobData.name, 'age', jobData.age)
+      local name = rcall('HGET', key, 'name')
+      local age = rcall('HGET', key, 'age')
+      return { name, age }
+    `;
+    const resBull = await registry.execute(['EVAL', scriptBull, '1', 'job:1', '{"name":"bull_job","age":25}'], getCtx());
+    expect(resBull).toContain('bull_job');
+    expect(resBull).toContain('25');
+
+    // 3. SCRIPT LOAD and EVALSHA
+    const shaRes = await registry.execute(['SCRIPT', 'LOAD', 'return redis.call("INCR", KEYS[1])'], getCtx());
+    expect(shaRes).toContain('$');
+    const sha = shaRes.split('\r\n')[1]!;
+
+    const exists = await registry.execute(['SCRIPT', 'EXISTS', sha], getCtx());
+    expect(exists).toBe('*1\r\n:1\r\n');
+
+    const shaRun = await registry.execute(['EVALSHA', sha, '1', 'lua_counter'], getCtx());
+    expect(shaRun).toBe(':1\r\n');
   });
 
   test('JSON Persistence: SAVE and load', async () => {

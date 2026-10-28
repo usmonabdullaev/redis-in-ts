@@ -7,6 +7,8 @@ import { hashCommands } from './handlers/hashes.ts';
 import { listCommands } from './handlers/lists.ts';
 import { setCommands } from './handlers/sets.ts';
 import { zsetCommands } from './handlers/zsets.ts';
+import { streamCommands } from './handlers/streams.ts';
+import { scriptingCommands } from './handlers/scripting.ts';
 import { serverCommands } from './handlers/server.ts';
 import { pubsubCommands } from './handlers/pubsub.ts';
 
@@ -21,6 +23,8 @@ export class CommandRegistry {
     this.registerAll(listCommands);
     this.registerAll(setCommands);
     this.registerAll(zsetCommands);
+    this.registerAll(streamCommands);
+    this.registerAll(scriptingCommands);
     this.registerAll(serverCommands);
     this.registerAll(pubsubCommands);
   }
@@ -40,6 +44,7 @@ export class CommandRegistry {
       return '';
     }
 
+    ctx.registry = this;
     const commandName = rawArgs[0]!.toUpperCase();
     const args = rawArgs.slice(1);
     const cmd = this.commands.get(commandName);
@@ -70,6 +75,41 @@ export class CommandRegistry {
 
     try {
       const response = await cmd.handler(args, ctx);
+      return response ?? '';
+    } catch (err: any) {
+      return RespSerializer.error(err.message || 'unknown error');
+    }
+  }
+
+  /**
+   * Synchronous execution used by Lua redis.call / redis.pcall
+   */
+  public executeSync(rawArgs: string[], ctx: CommandContext): string {
+    if (rawArgs.length === 0) {
+      return '';
+    }
+
+    ctx.registry = this;
+    const commandName = rawArgs[0]!.toUpperCase();
+    const args = rawArgs.slice(1);
+    const cmd = this.commands.get(commandName);
+
+    if (!cmd) {
+      return RespSerializer.error(`ERR unknown command '${commandName}'`);
+    }
+
+    if (cmd.minArgs !== undefined && args.length < cmd.minArgs) {
+      return RespSerializer.error(`ERR wrong number of arguments for '${commandName.toLowerCase()}' command`);
+    }
+    if (cmd.maxArgs !== undefined && args.length > cmd.maxArgs) {
+      return RespSerializer.error(`ERR wrong number of arguments for '${commandName.toLowerCase()}' command`);
+    }
+
+    try {
+      const response = cmd.handler(args, ctx);
+      if (response instanceof Promise) {
+        throw new Error('Asynchronous command not supported inside Lua script');
+      }
       return response ?? '';
     } catch (err: any) {
       return RespSerializer.error(err.message || 'unknown error');
